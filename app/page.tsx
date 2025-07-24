@@ -105,6 +105,7 @@ export default function KahootClone() {
       time_limit: 30,
     });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (!gameId) return;
@@ -292,18 +293,11 @@ export default function KahootClone() {
 
       // Insert questions
       console.log("Inserting questions...");
-      const questionsToInsert =
-        customQuestions.length > 0
-          ? customQuestions.map((q, i) => ({
-              ...q,
-              game_id: newGameId,
-              order_index: i,
-            }))
-          : sampleQuestions.map((q, i) => ({
-              ...q,
-              game_id: newGameId,
-              order_index: i,
-            }));
+      const questionsToInsert = sampleQuestions.map((q, i) => ({
+        ...q,
+        game_id: newGameId,
+        order_index: i,
+      }));
 
       const { error: questionsError } = await supabase
         .from("questions")
@@ -559,7 +553,12 @@ export default function KahootClone() {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create Custom Questions</DialogTitle>
+              <DialogTitle>
+                {" "}
+                {editingIndex !== null
+                  ? "Edit Question"
+                  : "Create Custom Questions"}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div>
@@ -636,46 +635,77 @@ export default function KahootClone() {
               </div>
 
               <div className="flex justify-between pt-4">
-                <Button
-                  onClick={() => {
-                    if (currentCustomQuestion.question_text.trim() === "") {
-                      alert("Please enter a question");
-                      return;
-                    }
-                    if (
-                      currentCustomQuestion.options.some(
-                        (opt) => opt.trim() === ""
-                      )
-                    ) {
-                      alert("Please fill in all options");
-                      return;
-                    }
-                    if (currentCustomQuestion.correct_answer === null) {
-                      alert("Please select the correct answer");
-                      return;
-                    }
+                {editingIndex !== null ? (
+                  <>
+                    <Button
+                      onClick={() => {
+                        // Save the edited question
+                        const updatedQuestions = [...customQuestions];
+                        updatedQuestions[editingIndex] = currentCustomQuestion;
+                        setCustomQuestions(updatedQuestions);
+                        setEditingIndex(null);
+                        // Reset form
+                        setCurrentCustomQuestion({
+                          question_text: "",
+                          options: ["", "", "", ""],
+                          correct_answer: null,
+                          time_limit: 30,
+                        });
+                      }}
+                    >
+                      Save Changes
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setEditingIndex(null);
+                        // Reset form
+                        setCurrentCustomQuestion({
+                          question_text: "",
+                          options: ["", "", "", ""],
+                          correct_answer: null,
+                          time_limit: 30,
+                        });
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    onClick={() => {
+                      if (currentCustomQuestion.question_text.trim() === "") {
+                        alert("Please enter a question");
+                        return;
+                      }
+                      if (
+                        currentCustomQuestion.options.some(
+                          (opt) => opt.trim() === ""
+                        )
+                      ) {
+                        alert("Please fill in all options");
+                        return;
+                      }
+                      if (currentCustomQuestion.correct_answer === null) {
+                        alert("Please select the correct answer");
+                        return;
+                      }
 
-                    setCustomQuestions([
-                      ...customQuestions,
-                      currentCustomQuestion,
-                    ]);
-                    setCurrentCustomQuestion({
-                      question_text: "",
-                      options: ["", "", "", ""],
-                      correct_answer: null,
-                      time_limit: 30,
-                    });
-                  }}
-                >
-                  Add Question
-                </Button>
-
-                <Button
-                  variant="outline"
-                  onClick={() => setIsDialogOpen(false)}
-                >
-                  Close
-                </Button>
+                      setCustomQuestions([
+                        ...customQuestions,
+                        currentCustomQuestion,
+                      ]);
+                      setCurrentCustomQuestion({
+                        question_text: "",
+                        options: ["", "", "", ""],
+                        correct_answer: null,
+                        time_limit: 30,
+                      });
+                    }}
+                  >
+                    Add Question
+                  </Button>
+                )}
               </div>
 
               {customQuestions.length > 0 && (
@@ -687,29 +717,108 @@ export default function KahootClone() {
                     {customQuestions.map((q, i) => (
                       <div
                         key={i}
-                        className="mb-2 pb-2 border-b last:border-b-0"
+                        className="mb-2 pb-2 border-b last:border-b-0 flex justify-between items-center"
                       >
-                        <div className="font-medium">
-                          {i + 1}. {q.question_text}
+                        <div>
+                          <div className="font-medium">
+                            {i + 1}. {q.question_text}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            Correct: {q.options[q.correct_answer as number]} |
+                            Time: {q.time_limit}s
+                          </div>
                         </div>
-                        <div className="text-sm text-gray-600">
-                          Correct: {q.options[q.correct_answer as number]} |
-                          Time: {q.time_limit}s
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setCurrentCustomQuestion(q);
+                              setEditingIndex(i);
+                            }}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => {
+                              const updatedQuestions = [...customQuestions];
+                              updatedQuestions.splice(i, 1);
+                              setCustomQuestions(updatedQuestions);
+                            }}
+                          >
+                            Remove
+                          </Button>
                         </div>
                       </div>
                     ))}
                   </div>
                   <Button
                     className="w-full mt-2"
-                    onClick={() => {
+                    onClick={async () => {
                       if (customQuestions.length === 0) {
                         alert("Please add at least one question");
                         return;
                       }
                       setIsDialogOpen(false);
+                      const newGameId = Math.floor(
+                        100000 + Math.random() * 900000
+                      ).toString();
+                      setGameId(newGameId);
+
+                      try {
+                        // Create game
+                        const { data: game, error: gameError } = await supabase
+                          .from("games")
+                          .insert({ id: newGameId })
+                          .select()
+                          .single();
+
+                        if (gameError) throw gameError;
+                        setGameState(game);
+
+                        // Insert custom questions
+                        const questionsToInsert = customQuestions.map(
+                          (q, i) => ({
+                            ...q,
+                            game_id: newGameId,
+                            order_index: i,
+                          })
+                        );
+
+                        const { error: questionsError } = await supabase
+                          .from("questions")
+                          .insert(questionsToInsert);
+
+                        if (questionsError) throw questionsError;
+
+                        // Join as host
+                        const { data: player, error: playerError } =
+                          await supabase
+                            .from("players")
+                            .insert({
+                              game_id: newGameId,
+                              name: playerName,
+                            })
+                            .select()
+                            .single();
+
+                        if (playerError) throw playerError;
+
+                        setCurrentPlayer(player);
+                        setGameCode(newGameId);
+                        setIsHost(true);
+
+                        await loadQuestions(newGameId);
+                        await loadPlayers();
+                      } catch (error) {
+                        console.error("Error creating game:", error);
+                        alert("Failed to create game. Please try again.");
+                      }
                     }}
                   >
-                    Done Adding Questions
+                    Create Game
                   </Button>
                 </div>
               )}
@@ -756,7 +865,7 @@ export default function KahootClone() {
                   className="w-full bg-transparent"
                   disabled={!playerName}
                 >
-                  Create New Game
+                  Use Sample Questions
                 </Button>
                 <DialogTrigger
                   disabled={!playerName}
@@ -765,7 +874,7 @@ export default function KahootClone() {
                     !playerName ? "bg-purple-200" : "hover:bg-purple-600"
                   )}
                 >
-                  Create Custom Questions
+                  Create Custom Game
                 </DialogTrigger>
               </div>
             </CardContent>
