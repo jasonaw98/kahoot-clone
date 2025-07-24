@@ -76,6 +76,7 @@ export default function KahootClone() {
     if (!gameId) return;
 
     console.log("Setting up real-time subscriptions for game:", gameId);
+    loadPlayers();
 
     // Subscribe to game state changes
     const gameChannel = supabase
@@ -157,14 +158,14 @@ export default function KahootClone() {
   }, [timeLeft, gameState?.status, currentQuestion, answerSubmitted, isHost]);
 
   const loadPlayers = async () => {
-    if (!gameState) return;
+    if (!gameId) return;
 
-    console.log("Loading players for game:", gameState.id);
+    console.log("Loading players for game:", gameId);
 
     const { data, error } = await supabase
       .from("players")
       .select("*")
-      .eq("game_id", gameState.id)
+      .eq("game_id", gameId)
       .order("score", { ascending: false });
 
     if (error) {
@@ -236,8 +237,8 @@ export default function KahootClone() {
   };
 
   const createGame = async () => {
-    const newGameId = Math.random().toString(36).substring(2, 8).toUpperCase();
-    setGameId(gameId);
+    const newGameId = Math.floor(100000 + Math.random() * 900000).toString();
+    setGameId(newGameId);
 
     try {
       // Create game
@@ -568,15 +569,18 @@ export default function KahootClone() {
         <Card className="w-full max-w-2xl">
           <CardHeader className="text-center">
             <CardTitle className="text-3xl font-bold">
-              Game Code: {gameState.id}
+              Game Code: {gameState.id} {isHost ? "Host" : "No"}
             </CardTitle>
             <p className="text-gray-600">Waiting for players to join...</p>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex items-center gap-2 text-lg">
-                <Users className="w-5 h-5" />
-                <span>{players.length} players joined</span>
+              <div className="flex justify-between">
+                <div className="flex items-center gap-2 text-lg">
+                  <Users className="w-5 h-5" />
+                  <span>{players.length} players joined</span>
+                </div>
+                <span>Current Player: {currentPlayer?.name || "None"}</span>
               </div>
 
               <div className="grid grid-cols-3 gap-2 max-h-60 overflow-y-auto">
@@ -589,18 +593,6 @@ export default function KahootClone() {
                   </div>
                 ))}
               </div>
-
-              {process.env.NODE_ENV === "development" && (
-                <div className="bg-yellow-100 p-4 rounded-lg text-sm">
-                  <h4 className="font-bold">Debug Info:</h4>
-                  <p>Game ID: {gameState.id}</p>
-                  <p>Status: {gameState.status}</p>
-                  <p>Is Host: {isHost ? "Yes" : "No"}</p>
-                  <p>Current Player: {currentPlayer?.name || "None"}</p>
-                  <p>Players Count: {players.length}</p>
-                  <p>Questions Count: {questions.length}</p>
-                </div>
-              )}
 
               {isHost && (
                 <Button
