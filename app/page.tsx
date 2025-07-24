@@ -6,6 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, Users, Clock, Zap } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 interface Player {
   id: string;
@@ -33,6 +42,12 @@ interface GameState {
   updated_at: string;
 }
 
+interface CustomQuestionForm {
+  question_text: string;
+  options: string[];
+  correct_answer: number | null;
+  time_limit: number;
+}
 // Sample questions for the demo
 const sampleQuestions = [
   {
@@ -58,10 +73,10 @@ const sampleQuestions = [
   },
   {
     question_text: "Who is more good looking?",
-    options: ["Pedal Pascal", "Brad Pitt", "Chris Evans", "Tom Holand"],
-    correct_answer: 1,
+    options: ["Pedro Pascal", "Brad Pitt", "Chris Evans", "Tom Holand"],
+    correct_answer: 2,
     time_limit: 20,
-    order_index: 2,
+    order_index: 3,
   },
 ];
 
@@ -78,6 +93,18 @@ export default function KahootClone() {
   const [isHost, setIsHost] = useState(false);
   const [answerSubmitted, setAnswerSubmitted] = useState(false);
   const [gameId, setGameId] = useState<string | null>(null);
+
+  const [customQuestions, setCustomQuestions] = useState<CustomQuestionForm[]>(
+    []
+  );
+  const [currentCustomQuestion, setCurrentCustomQuestion] =
+    useState<CustomQuestionForm>({
+      question_text: "",
+      options: ["", "", "", ""],
+      correct_answer: null,
+      time_limit: 30,
+    });
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!gameId) return;
@@ -265,14 +292,22 @@ export default function KahootClone() {
 
       // Insert questions
       console.log("Inserting questions...");
-      const questionsWithGameId = sampleQuestions.map((q) => ({
-        ...q,
-        game_id: newGameId,
-      }));
+      const questionsToInsert =
+        customQuestions.length > 0
+          ? customQuestions.map((q, i) => ({
+              ...q,
+              game_id: newGameId,
+              order_index: i,
+            }))
+          : sampleQuestions.map((q, i) => ({
+              ...q,
+              game_id: newGameId,
+              order_index: i,
+            }));
 
       const { error: questionsError } = await supabase
         .from("questions")
-        .insert(questionsWithGameId);
+        .insert(questionsToInsert);
 
       if (questionsError) {
         console.error("Questions creation error:", questionsError);
@@ -521,51 +556,221 @@ export default function KahootClone() {
   if (!gameState) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold text-purple-600">
-              Quiz Battle
-            </CardTitle>
-            <p className="text-gray-600">Real-time multiplayer quiz game</p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <input
-                type="text"
-                placeholder="Enter your name"
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-                className="w-full p-3 border rounded-lg"
-                maxLength={20}
-              />
-              <input
-                type="text"
-                placeholder="Game code (to join)"
-                value={gameCode}
-                onChange={(e) => setGameCode(e.target.value.toUpperCase())}
-                className="w-full p-3 border rounded-lg"
-                maxLength={6}
-              />
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create Custom Questions</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Question Text
+                </label>
+                <input
+                  type="text"
+                  value={currentCustomQuestion.question_text}
+                  onChange={(e) =>
+                    setCurrentCustomQuestion({
+                      ...currentCustomQuestion,
+                      question_text: e.target.value,
+                    })
+                  }
+                  className="w-full p-2 border rounded"
+                  placeholder="Enter your question"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Options
+                </label>
+                {currentCustomQuestion.options.map((option, index) => (
+                  <div key={index} className="flex items-center mb-2">
+                    <input
+                      type="radio"
+                      name="correct_answer"
+                      checked={currentCustomQuestion.correct_answer === index}
+                      onChange={() =>
+                        setCurrentCustomQuestion({
+                          ...currentCustomQuestion,
+                          correct_answer: index,
+                        })
+                      }
+                      className="mr-2"
+                    />
+                    <input
+                      type="text"
+                      value={option}
+                      onChange={(e) => {
+                        const newOptions = [...currentCustomQuestion.options];
+                        newOptions[index] = e.target.value;
+                        setCurrentCustomQuestion({
+                          ...currentCustomQuestion,
+                          options: newOptions,
+                        });
+                      }}
+                      className="w-full p-2 border rounded"
+                      placeholder={`Option ${index + 1}`}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Time Limit (seconds)
+                </label>
+                <input
+                  type="number"
+                  min="10"
+                  max="60"
+                  value={currentCustomQuestion.time_limit}
+                  onChange={(e) =>
+                    setCurrentCustomQuestion({
+                      ...currentCustomQuestion,
+                      time_limit: parseInt(e.target.value) || 30,
+                    })
+                  }
+                  className="w-full p-2 border rounded"
+                />
+              </div>
+
+              <div className="flex justify-between pt-4">
+                <Button
+                  onClick={() => {
+                    if (currentCustomQuestion.question_text.trim() === "") {
+                      alert("Please enter a question");
+                      return;
+                    }
+                    if (
+                      currentCustomQuestion.options.some(
+                        (opt) => opt.trim() === ""
+                      )
+                    ) {
+                      alert("Please fill in all options");
+                      return;
+                    }
+                    if (currentCustomQuestion.correct_answer === null) {
+                      alert("Please select the correct answer");
+                      return;
+                    }
+
+                    setCustomQuestions([
+                      ...customQuestions,
+                      currentCustomQuestion,
+                    ]);
+                    setCurrentCustomQuestion({
+                      question_text: "",
+                      options: ["", "", "", ""],
+                      correct_answer: null,
+                      time_limit: 30,
+                    });
+                  }}
+                >
+                  Add Question
+                </Button>
+
+                <Button
+                  variant="outline"
+                  onClick={() => setIsDialogOpen(false)}
+                >
+                  Close
+                </Button>
+              </div>
+
+              {customQuestions.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="font-medium mb-2">
+                    Your Questions ({customQuestions.length})
+                  </h3>
+                  <div className="max-h-40 overflow-y-auto border rounded p-2">
+                    {customQuestions.map((q, i) => (
+                      <div
+                        key={i}
+                        className="mb-2 pb-2 border-b last:border-b-0"
+                      >
+                        <div className="font-medium">
+                          {i + 1}. {q.question_text}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          Correct: {q.options[q.correct_answer as number]} |
+                          Time: {q.time_limit}s
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    className="w-full mt-2"
+                    onClick={() => {
+                      if (customQuestions.length === 0) {
+                        alert("Please add at least one question");
+                        return;
+                      }
+                      setIsDialogOpen(false);
+                    }}
+                  >
+                    Done Adding Questions
+                  </Button>
+                </div>
+              )}
             </div>
-            <div className="space-y-2">
-              <Button
-                onClick={joinGame}
-                className="w-full"
-                disabled={!playerName || !gameCode}
-              >
-                Join Game
-              </Button>
-              <Button
-                onClick={createGame}
-                variant="outline"
-                className="w-full bg-transparent"
-                disabled={!playerName}
-              >
-                Create New Game
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+          </DialogContent>
+
+          <Card className="w-full max-w-md">
+            <CardHeader className="text-center">
+              <CardTitle className="text-2xl font-bold text-purple-600">
+                Quiz Battle
+              </CardTitle>
+              <p className="text-gray-600">Real-time multiplayer quiz game</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  placeholder="Enter your name"
+                  value={playerName}
+                  onChange={(e) => setPlayerName(e.target.value)}
+                  className="w-full p-3 border rounded-lg"
+                  maxLength={20}
+                />
+                <input
+                  type="text"
+                  placeholder="Game code (to join)"
+                  value={gameCode}
+                  onChange={(e) => setGameCode(e.target.value.toUpperCase())}
+                  className="w-full p-3 border rounded-lg"
+                  maxLength={6}
+                />
+              </div>
+              <div className="space-y-2">
+                <Button
+                  onClick={joinGame}
+                  className="w-full"
+                  disabled={!playerName || !gameCode}
+                >
+                  Join Game
+                </Button>
+                <Button
+                  onClick={createGame}
+                  variant="outline"
+                  className="w-full bg-transparent"
+                  disabled={!playerName}
+                >
+                  Create New Game
+                </Button>
+                <DialogTrigger
+                  disabled={!playerName}
+                  className={cn(
+                    "bg-purple-500 w-full p-2 rounded-lg cursor-pointer text-white font-semibold",
+                    !playerName ? "bg-purple-200" : "hover:bg-purple-600"
+                  )}
+                >
+                  Create Custom Questions
+                </DialogTrigger>
+              </div>
+            </CardContent>
+          </Card>
+        </Dialog>
       </div>
     );
   }
@@ -607,7 +812,11 @@ export default function KahootClone() {
                   className="w-full mt-4"
                   disabled={players.length < 1}
                 >
-                  Start Game ({questions.length} questions)
+                  Start Game (
+                  {customQuestions.length > 0
+                    ? customQuestions.length
+                    : questions.length}{" "}
+                  questions)
                 </Button>
               )}
 
