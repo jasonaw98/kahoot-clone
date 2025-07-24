@@ -50,8 +50,15 @@ const sampleQuestions = [
     order_index: 1,
   },
   {
-    question_text: "What is 2 + 2?",
+    question_text: "What is 3 x 2?",
     options: ["3", "4", "5", "6"],
+    correct_answer: 3,
+    time_limit: 20,
+    order_index: 2,
+  },
+  {
+    question_text: "Who is more good looking?",
+    options: ["Pedal Pascal", "Brad Pitt", "Chris Evans", "Tom Holand"],
     correct_answer: 1,
     time_limit: 20,
     order_index: 2,
