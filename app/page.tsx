@@ -919,7 +919,7 @@ export default function KahootClone() {
         <Card className="w-full max-w-2xl">
           <CardHeader className="text-center">
             <CardTitle className="text-3xl font-bold">
-              Game Code: {gameState.id} {isHost ? "Host" : "No"}
+              Game Code: {gameState.id} {isHost ? "Host" : "Player"}
             </CardTitle>
             <p className="text-gray-600">Waiting for players to join...</p>
           </CardHeader>
