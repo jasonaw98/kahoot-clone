@@ -24,6 +24,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <script defer src="https://umami-jason.vercel.app/script.js" data-website-id="f61f58d5-af0e-46d2-bb9b-5c44483bbb21"></script>
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

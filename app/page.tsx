@@ -106,6 +106,26 @@ export default function KahootClone() {
     });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [dbStatus, setDbStatus] = useState<"checking" | "connected" | "error">(
+    "checking"
+  );
+
+  useEffect(() => {
+    const checkConnection = async () => {
+      try {
+        const { error } = await supabase
+          .from("games")
+          .select("count", { count: "exact", head: true });
+        if (error) throw error;
+        setDbStatus("connected");
+      } catch (error) {
+        console.error("Database connection error:", error);
+        setDbStatus("error");
+      }
+    };
+
+    checkConnection();
+  }, []);
 
   useEffect(() => {
     if (!gameId) return;
@@ -309,25 +329,9 @@ export default function KahootClone() {
       }
       console.log("Questions created successfully");
 
-      // Join as host
-      console.log("Adding host as player...");
-      const { data: player, error: playerError } = await supabase
-        .from("players")
-        .insert({
-          game_id: newGameId,
-          name: playerName,
-        })
-        .select()
-        .single();
+      // Host is just a watcher now, not a player
+      // setCurrentPlayer(player); // Removed
 
-      if (playerError) {
-        console.error("Player creation error:", playerError);
-        throw playerError;
-      }
-      console.log("Host player created:", player);
-
-      // setGameState(game)
-      setCurrentPlayer(player);
       setGameCode(newGameId);
       setIsHost(true);
 
@@ -338,6 +342,26 @@ export default function KahootClone() {
     } catch (error) {
       console.error("Error creating game:", error);
       alert("Failed to create game. Please try again.");
+    }
+  };
+
+  const cancelGame = async () => {
+    if (!gameId) return;
+
+    try {
+      console.log("Cancelling game:", gameId);
+      await supabase.from("games").delete().eq("id", gameId);
+
+      // Reset local state
+      setGameState(null);
+      setGameId(null);
+      setIsHost(false);
+      setPlayers([]);
+      setQuestions([]);
+      setCurrentPlayer(null);
+      setGameCode("");
+    } catch (error) {
+      console.error("Error cancelling game:", error);
     }
   };
 
@@ -578,7 +602,7 @@ export default function KahootClone() {
 
   if (!gameState) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-linear-to-br from-purple-600 to-blue-600 flex items-center justify-center p-4">
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -822,20 +846,9 @@ export default function KahootClone() {
 
                         if (questionsError) throw questionsError;
 
-                        // Join as host
-                        const { data: player, error: playerError } =
-                          await supabase
-                            .from("players")
-                            .insert({
-                              game_id: newGameId,
-                              name: playerName,
-                            })
-                            .select()
-                            .single();
+                        // Host is just a watcher now, not a player
+                        // setCurrentPlayer(player); // Removed
 
-                        if (playerError) throw playerError;
-
-                        setCurrentPlayer(player);
                         setGameCode(newGameId);
                         setIsHost(true);
 
@@ -855,7 +868,20 @@ export default function KahootClone() {
           </DialogContent>
 
           <Card className="w-full max-w-md">
-            <CardHeader className="text-center">
+            <CardHeader className="text-center relative">
+              <div className="absolute top-0 right-4 group">
+                <div
+                  className={`w-3 h-3 rounded-full ${dbStatus === "connected"
+                      ? "bg-green-500"
+                      : dbStatus === "error"
+                        ? "bg-red-500"
+                        : "bg-yellow-500"
+                    }`}
+                />
+                <span className="absolute right-0 top-6 px-2 py-1 text-xs bg-black text-white rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                  Database: {dbStatus}
+                </span>
+              </div>
               <CardTitle className="text-2xl font-bold text-purple-600">
                 Quiz Battle
               </CardTitle>
@@ -915,7 +941,7 @@ export default function KahootClone() {
 
   if (gameState.status === "waiting") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-linear-to-br from-purple-600 to-blue-600 flex items-center justify-center p-4">
         <Card className="w-full max-w-2xl">
           <CardHeader className="text-center">
             <CardTitle className="text-3xl font-bold">
@@ -945,17 +971,26 @@ export default function KahootClone() {
               </div>
 
               {isHost && (
-                <Button
-                  onClick={startGame}
-                  className="w-full mt-4"
-                  disabled={players.length < 1}
-                >
-                  Start Game (
-                  {customQuestions.length > 0
-                    ? customQuestions.length
-                    : questions.length}{" "}
-                  questions)
-                </Button>
+                <div className="flex flex-col gap-2 mt-4">
+                  <Button
+                    onClick={startGame}
+                    className="w-full"
+                    disabled={players.length < 1}
+                  >
+                    Start Game (
+                    {customQuestions.length > 0
+                      ? customQuestions.length
+                      : questions.length}{" "}
+                    questions)
+                  </Button>
+                  <Button
+                    onClick={cancelGame}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Back to Edit
+                  </Button>
+                </div>
               )}
 
               {!isHost && (
@@ -966,7 +1001,7 @@ export default function KahootClone() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </div >
     );
   }
 
@@ -974,16 +1009,15 @@ export default function KahootClone() {
     const showResults = answerSubmitted;
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-600 p-4">
+      <div className="min-h-screen bg-linear-to-br from-purple-600 to-blue-600 p-4">
         <div className="max-w-4xl mx-auto space-y-6">
           {/* Header */}
           <div className="flex justify-between items-center text-white">
             <div className="flex items-center gap-2">
               <Clock className="w-5 h-5" />
               <span
-                className={`text-xl font-bold ${
-                  timeLeft <= 5 ? "text-red-300 animate-pulse" : ""
-                }`}
+                className={`text-xl font-bold ${timeLeft <= 5 ? "text-red-300 animate-pulse" : ""
+                  }`}
               >
                 {timeLeft}s
               </span>
@@ -1040,8 +1074,8 @@ export default function KahootClone() {
                   return (
                     <Button
                       key={index}
-                      onClick={() => submitAnswer(index)}
-                      disabled={answerSubmitted || timeLeft === 0}
+                      onClick={() => !isHost && submitAnswer(index)}
+                      disabled={isHost || answerSubmitted || timeLeft === 0}
                       variant={buttonVariant}
                       className={buttonClass}
                     >
@@ -1072,11 +1106,10 @@ export default function KahootClone() {
                   .map((player, index) => (
                     <div
                       key={player.id}
-                      className={`flex items-center justify-between p-3 rounded-lg ${
-                        player.id === currentPlayer?.id
-                          ? "bg-blue-100 border-2 border-blue-300"
-                          : "bg-gray-50"
-                      }`}
+                      className={`flex items-center justify-between p-3 rounded-lg ${player.id === currentPlayer?.id
+                        ? "bg-blue-100 border-2 border-blue-300"
+                        : "bg-gray-50"
+                        }`}
                     >
                       <div className="flex items-center gap-3">
                         <Badge variant={index === 0 ? "default" : "secondary"}>
@@ -1109,7 +1142,7 @@ export default function KahootClone() {
         .findIndex((p) => p.id === currentPlayer?.id) + 1;
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-linear-to-br from-purple-600 to-blue-600 flex items-center justify-center p-4">
         <Card className="w-full max-w-2xl">
           <CardHeader className="text-center">
             <CardTitle className="text-3xl font-bold">
@@ -1133,15 +1166,14 @@ export default function KahootClone() {
                   .map((player, index) => (
                     <div
                       key={player.id}
-                      className={`flex items-center justify-between p-4 rounded-lg ${
-                        index === 0
-                          ? "bg-yellow-100 border-1 border-yellow-400"
-                          : index === 1
-                          ? "bg-gray-100 border-1 border-gray-400"
+                      className={`flex items-center justify-between p-4 rounded-lg ${index === 0
+                        ? "bg-yellow-100 border border-yellow-400"
+                        : index === 1
+                          ? "bg-gray-100 border border-gray-400"
                           : index === 2
-                          ? "bg-orange-100 border-1 border-orange-400"
-                          : "bg-gray-50"
-                      } ${player.id === currentPlayer?.id ? "border-4" : ""}`}
+                            ? "bg-orange-100 border border-orange-400"
+                            : "bg-gray-50"
+                        } ${player.id === currentPlayer?.id ? "border-4" : ""}`}
                     >
                       <div className="flex items-center gap-3">
                         <Badge
