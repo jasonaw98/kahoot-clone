@@ -61,28 +61,28 @@ const sampleQuestions = [
 		question_text: "What is the capital of France?",
 		options: ["London", "Berlin", "Paris", "Madrid"],
 		correct_answer: 2,
-		time_limit: 30,
+		time_limit: 15,
 		order_index: 0,
 	},
 	{
 		question_text: "Which planet is known as the Red Planet?",
 		options: ["Venus", "Mars", "Jupiter", "Saturn"],
 		correct_answer: 1,
-		time_limit: 30,
+		time_limit: 15,
 		order_index: 1,
 	},
 	{
 		question_text: "What is 3 x 2?",
 		options: ["3", "4", "5", "6"],
 		correct_answer: 3,
-		time_limit: 20,
+		time_limit: 15,
 		order_index: 2,
 	},
 	{
 		question_text: "Who is more good looking?",
 		options: ["Pedro Pascal", "Brad Pitt", "Chris Evans", "Tom Holand"],
 		correct_answer: 2,
-		time_limit: 20,
+		time_limit: 15,
 		order_index: 3,
 	},
 ];
@@ -744,7 +744,7 @@ export default function KahootClone() {
 									Options
 								</label>
 								{currentCustomQuestion.options.map((option, index) => (
-									<div key={option} className="flex items-center mb-2">
+									<div key={index} className="flex items-center mb-2">
 										<input
 											type="radio"
 											name="correct_answer"
@@ -812,7 +812,7 @@ export default function KahootClone() {
 													question_text: "",
 													options: ["", "", "", ""],
 													correct_answer: null,
-													time_limit: 30,
+													time_limit: 20,
 												});
 											}}
 										>
@@ -827,7 +827,7 @@ export default function KahootClone() {
 													question_text: "",
 													options: ["", "", "", ""],
 													correct_answer: null,
-													time_limit: 30,
+													time_limit: 20,
 												});
 											}}
 										>
@@ -862,7 +862,7 @@ export default function KahootClone() {
 												question_text: "",
 												options: ["", "", "", ""],
 												correct_answer: null,
-												time_limit: 30,
+												time_limit: 20,
 											});
 										}}
 									>
@@ -879,7 +879,7 @@ export default function KahootClone() {
 									<div className="max-h-40 overflow-y-auto border rounded p-2">
 										{customQuestions.map((q, i) => (
 											<div
-												key={q.question_text}
+												key={i}
 												className="mb-2 pb-2 border-b last:border-b-0 flex justify-between items-center"
 											>
 												<div>
@@ -1228,7 +1228,7 @@ export default function KahootClone() {
 										: [];
 
 									return (
-										<div key={option} className="flex flex-col gap-2">
+										<div key={index} className="flex flex-col gap-2">
 											{isHost && (
 												<div className="flex flex-wrap gap-1 justify-center min-h-6">
 													{voters.map((voter) => (
