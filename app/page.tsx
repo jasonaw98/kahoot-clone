@@ -424,6 +424,7 @@ export default function KahootClone() {
 				selected_answer: answerIndex,
 				response_time: (currentQuestion.time_limit - timeLeft) * 1000,
 				points_earned: points,
+				playerName: currentPlayer.name,
 			});
 
 			// Update player score
