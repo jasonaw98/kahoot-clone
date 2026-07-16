@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -110,7 +110,7 @@ export default function KahootClone() {
 			question_text: "",
 			options: ["", "", "", ""],
 			correct_answer: null,
-			time_limit: 30,
+			time_limit: 20,
 		});
 	const [isDialogOpen, setIsDialogOpen] = useState(false);
 	const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -118,7 +118,7 @@ export default function KahootClone() {
 		"checking",
 	);
 
-	const loadPlayers = async () => {
+	const loadPlayers = useCallback(async () => {
 		if (!gameId) return;
 
 		console.log("Loading players for game:", gameId);
@@ -136,68 +136,71 @@ export default function KahootClone() {
 
 		console.log("Loaded players:", data);
 		setPlayers(data || []);
-	};
+	}, [gameId]);
 
-	const loadQuestions = async (gameId: string) => {
-		console.log("Loading questions for game:", gameId);
+	const loadQuestions = useCallback(
+		async (targetGameId: string) => {
+			console.log("Loading questions for game:", targetGameId);
 
-		const { data, error } = await supabase
-			.from("questions")
-			.select("*")
-			.eq("game_id", gameId)
-			.order("order_index");
+			const { data, error } = await supabase
+				.from("questions")
+				.select("*")
+				.eq("game_id", targetGameId)
+				.order("order_index");
 
-		if (error) {
-			console.error("Error loading questions:", error);
-			return;
-		}
+			if (error) {
+				console.error("Error loading questions:", error);
+				return;
+			}
 
-		console.log("Questions loaded:", data);
-		setQuestions(data || []);
+			console.log("Questions loaded:", data);
+			setQuestions(data || []);
 
-		if (gameState?.status === "active") {
-			console.log("Game is active, loading current question immediately");
-			if (data && data.length > gameState.current_question) {
-				const question = data[gameState.current_question];
-				console.log("Setting current question immediately:", question);
+			if (gameState?.status === "active") {
+				console.log("Game is active, loading current question immediately");
+				if (data && data.length > gameState.current_question) {
+					const question = data[gameState.current_question];
+					console.log("Setting current question immediately:", question);
+					setCurrentQuestion(question);
+					setTimeLeft(question.time_limit);
+					setSelectedAnswer(null);
+					setAnswerSubmitted(false);
+					setQuestionAnswers([]);
+				}
+			}
+		},
+		[gameState],
+	);
+
+	const loadCurrentQuestion = useCallback(
+		async (questionIndex: number) => {
+			if (questions.length > questionIndex) {
+				const question = questions[questionIndex];
+				console.log("Setting current question:", question);
 				setCurrentQuestion(question);
 				setTimeLeft(question.time_limit);
 				setSelectedAnswer(null);
 				setAnswerSubmitted(false);
 				setQuestionAnswers([]);
-			}
-		}
-	};
-
-	const loadCurrentQuestion = async (questionIndex: number) => {
-		console.log("loadCurrentQuestion called with index:", questionIndex);
-		console.log("Available questions:", questions.length, questions);
-
-		if (questions.length > questionIndex) {
-			const question = questions[questionIndex];
-			console.log("Setting current question:", question);
-			setCurrentQuestion(question);
-			setTimeLeft(question.time_limit);
-			setSelectedAnswer(null);
-			setAnswerSubmitted(false);
-			setQuestionAnswers([]);
-		} else {
-			console.error(
-				"No question found at index:",
-				questionIndex,
-				"out of",
-				questions.length,
-				"questions",
-			);
-			// If we're in an active game but don't have the question, try to reload questions
-			if (gameState?.status === "active") {
-				console.log(
-					"Attempting to reload questions since we're missing the current one",
+			} else {
+				console.error(
+					"No question found at index:",
+					questionIndex,
+					"out of",
+					questions.length,
+					"questions",
 				);
-				await loadQuestions(gameState.id);
+				// If we're in an active game but don't have the question, try to reload questions
+				if (gameState?.status === "active") {
+					console.log(
+						"Attempting to reload questions since we're missing the current one",
+					);
+					await loadQuestions(gameState.id);
+				}
 			}
-		}
-	};
+		},
+		[questions, gameState, loadQuestions],
+	);
 
 	const createGame = async () => {
 		const newGameId = Math.floor(100000 + Math.random() * 900000).toString();
@@ -363,7 +366,7 @@ export default function KahootClone() {
 			console.log("Game started successfully, updated data:", data);
 
 			// Force update the local game state to ensure UI updates
-			if (data && data[0]) {
+			if (data?.[0]) {
 				console.log("Manually updating local game state");
 				setGameState(data[0]);
 			}
@@ -373,7 +376,30 @@ export default function KahootClone() {
 		}
 	};
 
-	const checkAllPlayersAnswered = async () => {
+	const nextQuestion = useCallback(async () => {
+		if (!gameState) return;
+
+		const nextQuestionIndex = gameState.current_question + 1;
+		if (nextQuestionIndex < questions.length) {
+			await supabase
+				.from("games")
+				.update({
+					current_question: nextQuestionIndex,
+					updated_at: new Date().toISOString(),
+				})
+				.eq("id", gameState.id);
+		} else {
+			await supabase
+				.from("games")
+				.update({
+					status: "finished",
+					updated_at: new Date().toISOString(),
+				})
+				.eq("id", gameState.id);
+		}
+	}, [gameState, questions.length]);
+
+	const checkAllPlayersAnswered = useCallback(async () => {
 		if (!gameState || !currentQuestion) return;
 
 		try {
@@ -403,67 +429,53 @@ export default function KahootClone() {
 		} catch (error) {
 			console.error("Error checking if all players answered:", error);
 		}
-	};
+	}, [gameState, currentQuestion, players.length, nextQuestion]);
 
-	const submitAnswer = async (answerIndex: number) => {
-		if (!currentPlayer || !currentQuestion || answerSubmitted) return;
+	const submitAnswer = useCallback(
+		async (answerIndex: number) => {
+			if (!currentPlayer || !currentQuestion || answerSubmitted) return;
 
-		setSelectedAnswer(answerIndex);
-		setAnswerSubmitted(true);
+			setSelectedAnswer(answerIndex);
+			setAnswerSubmitted(true);
 
-		// Calculate score based on speed and correctness
-		const isCorrect = answerIndex === currentQuestion.correct_answer;
-		const speedBonus = Math.max(0, timeLeft * 10);
-		const points = isCorrect ? 100 + speedBonus : 0;
+			// Calculate score based on speed and correctness
+			const isCorrect = answerIndex === currentQuestion.correct_answer;
+			const speedBonus = Math.max(0, timeLeft * 10);
+			const points = isCorrect ? 100 + speedBonus : 0;
 
-		try {
-			// Record the answer
-			await supabase.from("answers").insert({
-				player_id: currentPlayer.id,
-				question_id: currentQuestion.id,
-				selected_answer: answerIndex,
-				response_time: (currentQuestion.time_limit - timeLeft) * 1000,
-				points_earned: points,
-				playerName: currentPlayer.name,
-			});
+			try {
+				// Record the answer
+				await supabase.from("answers").insert({
+					player_id: currentPlayer.id,
+					question_id: currentQuestion.id,
+					selected_answer: answerIndex,
+					response_time: (currentQuestion.time_limit - timeLeft) * 1000,
+					points_earned: points,
+					playername: currentPlayer.name,
+				});
 
-			// Update player score
-			const newScore = currentPlayer.score + points;
-			await supabase
-				.from("players")
-				.update({ score: newScore })
-				.eq("id", currentPlayer.id);
+				// Update player score
+				const newScore = currentPlayer.score + points;
+				await supabase
+					.from("players")
+					.update({ score: newScore })
+					.eq("id", currentPlayer.id);
 
-			setCurrentPlayer({ ...currentPlayer, score: newScore });
+				setCurrentPlayer({ ...currentPlayer, score: newScore });
 
-			checkAllPlayersAnswered();
-		} catch (error) {
-			console.error("Error submitting answer:", error);
-		}
-	};
-
-	const nextQuestion = async () => {
-		if (!gameState) return;
-
-		const nextQuestionIndex = gameState.current_question + 1;
-		if (nextQuestionIndex < questions.length) {
-			await supabase
-				.from("games")
-				.update({
-					current_question: nextQuestionIndex,
-					updated_at: new Date().toISOString(),
-				})
-				.eq("id", gameState.id);
-		} else {
-			await supabase
-				.from("games")
-				.update({
-					status: "finished",
-					updated_at: new Date().toISOString(),
-				})
-				.eq("id", gameState.id);
-		}
-	};
+				checkAllPlayersAnswered();
+			} catch (error) {
+				console.error("Error submitting answer:", error);
+			}
+		},
+		[
+			currentPlayer,
+			currentQuestion,
+			answerSubmitted,
+			timeLeft,
+			checkAllPlayersAnswered,
+		],
+	);
 
 	const handleConfetti = () => {
 		const duration = 5 * 1000;
@@ -513,8 +525,6 @@ export default function KahootClone() {
 
 	useEffect(() => {
 		if (!gameId) return;
-
-		console.log("Setting up real-time subscriptions for game:", gameId);
 		loadPlayers();
 
 		// Subscribe to game state changes
@@ -577,7 +587,13 @@ export default function KahootClone() {
 			gameChannel.unsubscribe();
 			playersChannel.unsubscribe();
 		};
-	}, [gameId]);
+	}, [
+		gameId,
+		loadPlayers,
+		loadQuestions,
+		loadCurrentQuestion,
+		questions.length,
+	]);
 
 	// Timer countdown
 	useEffect(() => {
@@ -587,14 +603,16 @@ export default function KahootClone() {
 		} else if (timeLeft === 0 && currentQuestion && !answerSubmitted) {
 			// Auto-submit when time runs out
 			submitAnswer(-1); // -1 indicates no answer
-		} else if (timeLeft === 0 && isHost && currentQuestion) {
-			// If host and time is up, automatically move to next question
-			console.log("Time's up! Host automatically advancing to next question");
-			setTimeout(() => {
-				nextQuestion();
-			}, 1000); // Show results for 3 seconds before moving on
+			nextQuestion();
 		}
-	}, [timeLeft, gameState?.status, currentQuestion, answerSubmitted, isHost]);
+	}, [
+		timeLeft,
+		gameState?.status,
+		currentQuestion,
+		answerSubmitted,
+		submitAnswer,
+		nextQuestion,
+	]);
 
 	// Host sees live votes for the current question.
 	const questionId = currentQuestion?.id;
@@ -675,10 +693,14 @@ export default function KahootClone() {
 		});
 
 		if (gameState?.status === "active" && questions.length > 0) {
-			console.log("Loading question for active game");
 			loadCurrentQuestion(gameState.current_question);
 		}
-	}, [gameState?.current_question, gameState?.status, questions]);
+	}, [
+		gameState?.current_question,
+		gameState?.status,
+		questions,
+		loadCurrentQuestion,
+	]);
 
 	if (!gameState) {
 		return (
@@ -687,7 +709,6 @@ export default function KahootClone() {
 					<DialogContent>
 						<DialogHeader>
 							<DialogTitle>
-								{" "}
 								{editingIndex !== null
 									? "Edit Question"
 									: "Create Custom Questions"}
@@ -723,7 +744,7 @@ export default function KahootClone() {
 									Options
 								</label>
 								{currentCustomQuestion.options.map((option, index) => (
-									<div key={index} className="flex items-center mb-2">
+									<div key={option} className="flex items-center mb-2">
 										<input
 											type="radio"
 											name="correct_answer"
@@ -858,7 +879,7 @@ export default function KahootClone() {
 									<div className="max-h-40 overflow-y-auto border rounded p-2">
 										{customQuestions.map((q, i) => (
 											<div
-												key={i}
+												key={q.question_text}
 												className="mb-2 pb-2 border-b last:border-b-0 flex justify-between items-center"
 											>
 												<div>
@@ -1207,7 +1228,7 @@ export default function KahootClone() {
 										: [];
 
 									return (
-										<div key={index} className="flex flex-col gap-2">
+										<div key={option} className="flex flex-col gap-2">
 											{isHost && (
 												<div className="flex flex-wrap gap-1 justify-center min-h-6">
 													{voters.map((voter) => (
